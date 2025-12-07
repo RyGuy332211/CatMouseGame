@@ -1,0 +1,13 @@
+body { margin: 0; padding: 0; background: #222; color: white; font-family: monospace; overflow: hidden; }
+#ui-container { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+#login-screen, #menu-screen, #lobby-screen, #game-over-screen {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: #333; padding: 20px; text-align: center; border: 2px solid #555; pointer-events: auto;
+}
+.hidden { display: none; }
+input { display: block; margin: 10px auto; padding: 5px; }
+button { padding: 10px 20px; background: #444; color: white; border: 1px solid #777; cursor: pointer; margin: 5px; }
+button:hover { background: #555; }
+#game-ui { pointer-events: none; position: absolute; top: 10px; left: 10px; }
+#stats div { margin-bottom: 5px; font-size: 20px; text-shadow: 1px 1px 0 #000; }
+#game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
