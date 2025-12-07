@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat vs Mice</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+</head>
+<body>
+    <div id="ui-container">
+        <div id="login-screen">
+            <h1>Login</h1>
+            <input type="text" id="username" placeholder="Username (no spaces)">
+            <input type="password" id="password" placeholder="Password">
+            <button id="login-btn">Login / Register</button>
+            <div id="login-msg"></div>
+        </div>
+
+        <div id="menu-screen" class="hidden">
+            <h1>Main Menu</h1>
+            <button id="find-lobby-btn">Find Lobby</button>
+            <button id="create-lobby-btn">Create Lobby</button>
+            <div id="settings-panel">
+                <label>Music Volume: <input type="range" id="music-vol"></label>
+                <label>SFX Volume: <input type="range" id="sfx-vol"></label>
+            </div>
+        </div>
+
+        <div id="lobby-screen" class="hidden">
+            <h1>Lobby</h1>
+            <h2 id="lobby-timer">Waiting for players...</h2>
+            <ul id="player-list"></ul>
+        </div>
+
+        <div id="game-ui" class="hidden">
+            <div id="stats">
+                <div id="hp-bar">HP: 100</div>
+                <div id="sprint-bar">Sprint Ready</div>
+                <div id="role-display"></div>
+            </div>
+            <div id="timer-display"></div>
+            <div id="terminals-left">Terminals: 0/5</div>
+        </div>
+        
+        <div id="game-over-screen" class="hidden">
+            <h1 id="winner-text"></h1>
+            <button onclick="location.reload()">Return to Menu</button>
+        </div>
+    </div>
+
+    <div id="game-container"></div>
+
+    <script src="js/main.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>
