@@ -126,11 +126,12 @@ io.on('connection', (socket) => {
       playerState.isSprinting = false;
     }
 
-    if (input.up) playerState.y -= speed * 0.016;
-    if (input.down) playerState.y += speed * 0.016;
-    if (input.left) playerState.x -= speed * 0.016;
-    if (input.right) playerState.x += speed * 0.016;
+    if (input.up) playerState.y -= speed * 0.05; // Adjusted for 20 TPS
+    if (input.down) playerState.y += speed * 0.05;
+    if (input.left) playerState.x -= speed * 0.05;
+    if (input.right) playerState.x += speed * 0.05;
 
+    // Map Boundaries
     if (playerState.x < -MAP_SIZE/2) playerState.x = -MAP_SIZE/2;
     if (playerState.x > MAP_SIZE/2) playerState.x = MAP_SIZE/2;
     if (playerState.y < -MAP_SIZE/2) playerState.y = -MAP_SIZE/2;
@@ -159,7 +160,7 @@ io.on('connection', (socket) => {
           if (!t.completed) {
             const dist = Math.hypot(playerState.x - t.x, playerState.y - t.y);
             if (dist < 60) {
-              t.progress += (100 / 60) * 0.016; 
+              t.progress += (100 / 60) * 0.05; 
               if (t.progress >= 100) {
                 t.progress = 100;
                 t.completed = true;
@@ -212,12 +213,13 @@ function checkWinCondition(game) {
   }
 }
 
+// Game Loop (20 Ticks Per Second)
 setInterval(() => {
   for (const lobbyId in lobbies) {
     const lobby = lobbies[lobbyId];
     if (!lobby.started && lobby.players.length >= 2) {
-      lobby.timer -= 1;
-      io.to(lobbyId).emit('lobbyTimer', lobby.timer);
+      lobby.timer -= 0.05; // FIXED: timer subtracts real time now
+      io.to(lobbyId).emit('lobbyTimer', Math.ceil(lobby.timer));
       if (lobby.timer <= 0) {
         lobby.started = true;
         GAMES[lobbyId] = createGameState(lobbyId, lobby.players);
@@ -255,6 +257,7 @@ setInterval(() => {
   }
 }, 50);
 
+// CHANGED TO PORT 3030
 server.listen(3030, () => {
   console.log('Server running on port 3030');
 });
