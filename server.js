@@ -1,4 +1,4 @@
-const express = require('express');
+cconst express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { loginUser, registerUser } = require('./database');
@@ -13,7 +13,9 @@ const lobbies = {};
 const players = {};
 const GAMES = {};
 const MAP_SIZE = 2000;
-const TICK_RATE = 60; // 60 updates per second
+
+// CHANGED: 240 Updates Per Second
+const TICK_RATE = 240; 
 const TICK_DELTA = 1 / TICK_RATE; 
 
 function createGameState(lobbyId, playerIds) {
@@ -22,7 +24,6 @@ function createGameState(lobbyId, playerIds) {
     players: {},
     terminals: [],
     exitOpen: false,
-    exitLocation: { x: 0, y: 0 },
     timeLeft: 900,
     status: 'playing',
     winner: null
@@ -46,17 +47,11 @@ function createGameState(lobbyId, playerIds) {
     };
   });
 
-  // Create Terminals Snapped to Grid (Multiples of 100)
+  // Create Terminals Snapped to Grid
   for (let i = 0; i < 6; i++) {
     let tx = Math.floor(Math.random() * (MAP_SIZE/100)) * 100 - (MAP_SIZE/2);
     let ty = Math.floor(Math.random() * (MAP_SIZE/100)) * 100 - (MAP_SIZE/2);
-    state.terminals.push({
-      id: i,
-      x: tx,
-      y: ty,
-      progress: 0,
-      completed: false
-    });
+    state.terminals.push({ id: i, x: tx, y: ty, progress: 0, completed: false });
   }
 
   return state;
@@ -117,13 +112,14 @@ io.on('connection', (socket) => {
     
     const game = GAMES[p.lobby];
     const playerState = game.players[socket.id];
-    if (playerState.dead) return;
+    
+    if (!playerState || playerState.dead) return;
 
     let speed = playerState.speed;
     
     // Sprint Logic
     if (input.sprint && playerState.sprintCooldown <= 0 && playerState.sprintTime > 0) {
-      speed *= 1.6; // Faster sprint
+      speed *= 1.6;
       playerState.isSprinting = true;
     } else {
       playerState.isSprinting = false;
@@ -147,22 +143,37 @@ io.on('connection', (socket) => {
       if (playerState.role === 'cat') {
         for (const pid in game.players) {
           const target = game.players[pid];
+          // Can only hit LIVING mice
           if (target.role === 'mouse' && !target.dead) {
             const dist = Math.hypot(playerState.x - target.x, playerState.y - target.y);
-            if (dist < 80) { // Increased Range
+            if (dist < 80) { 
+              // HIT!
               target.hp -= 40;
-              target.speed += 300; // Zoomies on hit
-              setTimeout(() => { if(!target.dead) target.speed -= 300; }, 2000);
-              if (target.hp <= 0) target.dead = true;
+              
+              // FIX: Clamp HP at 0
+              if (target.hp <= 0) {
+                  target.hp = 0;
+                  target.dead = true;
+                  checkGameEnd(game, p.lobby);
+              } else {
+                  // Only apply speed boost if still alive
+                  target.speed += 300; 
+                  setTimeout(() => { if(!target.dead) target.speed -= 300; }, 2000);
+              }
+
+              // Cat slows down
+              playerState.speed -= 100;
+              setTimeout(() => { playerState.speed += 100; }, 2000);
             }
           }
         }
       } else {
+        // Mouse Repair Logic
         game.terminals.forEach(t => {
           if (!t.completed) {
             const dist = Math.hypot(playerState.x - t.x, playerState.y - t.y);
-            if (dist < 100) { // Increased Range
-              t.progress += (100 / 60) * TICK_DELTA * 10; // Faster repair for testing? No, keep it standard
+            if (dist < 100) {
+              t.progress += (100 / 60) * TICK_DELTA * 10; 
               if (t.progress >= 100) {
                 t.progress = 100;
                 t.completed = true;
@@ -176,12 +187,38 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    // ... (Keep existing disconnect logic if simple, or use this concise one)
     const p = players[socket.id];
+    
+    // 1. Remove from Lobby List
     if (p && p.lobby && lobbies[p.lobby]) {
        lobbies[p.lobby].players = lobbies[p.lobby].players.filter(id => id !== socket.id);
-       if(lobbies[p.lobby].players.length === 0) delete lobbies[p.lobby];
+       if(lobbies[p.lobby].players.length === 0) {
+           delete lobbies[p.lobby];
+       }
     }
+
+    // 2. Handle ACTIVE GAME Disconnects
+    if (p && p.lobby && GAMES[p.lobby]) {
+        const game = GAMES[p.lobby];
+        const playerState = game.players[socket.id];
+        
+        if (playerState) {
+            // Mark them as dead/gone
+            playerState.dead = true;
+            delete game.players[socket.id]; // Remove from object so they don't count towards logic
+
+            // Check Win Conditions immediately
+            if (playerState.role === 'cat') {
+                // Cat left -> Mice Win
+                io.to(p.lobby).emit('gameOver', 'mice');
+                delete GAMES[p.lobby];
+            } else {
+                // Mouse left -> Check if any mice remain
+                checkGameEnd(game, p.lobby);
+            }
+        }
+    }
+
     delete players[socket.id];
   });
 });
@@ -191,7 +228,18 @@ function checkWinCondition(game) {
   if (completed >= 5) game.exitOpen = true;
 }
 
-// GAME LOOP (60 FPS)
+function checkGameEnd(game, lobbyId) {
+    // Count living mice
+    const miceLeft = Object.values(game.players).filter(pl => pl.role === 'mouse' && !pl.dead).length;
+    
+    if (miceLeft === 0) {
+        io.to(lobbyId).emit('gameOver', 'cat');
+        delete GAMES[lobbyId];
+        delete lobbies[lobbyId];
+    }
+}
+
+// GAME LOOP (240 FPS)
 setInterval(() => {
   // Lobby Timers
   for (const lobbyId in lobbies) {
@@ -203,7 +251,6 @@ setInterval(() => {
         GAMES[lobbyId] = createGameState(lobbyId, lobby.players);
         io.to(lobbyId).emit('gameStart', GAMES[lobbyId]);
       } else {
-        // Only emit timer every second to save bandwidth
         if (Math.floor(lobby.timer) < Math.floor(lobby.timer + TICK_DELTA)) {
              io.to(lobbyId).emit('lobbyTimer', Math.ceil(lobby.timer));
         }
@@ -219,29 +266,24 @@ setInterval(() => {
     for (const pid in game.players) {
       const p = game.players[pid];
       
-      // Sprint Logic Refined
+      // Sprint
       if (p.isSprinting) {
         p.sprintTime -= TICK_DELTA;
         if (p.sprintTime <= 0) {
           p.isSprinting = false;
           p.sprintTime = 0;
-          p.sprintCooldown = 20; // Cooldown starts
+          p.sprintCooldown = 20; 
         }
       } else {
-        // If not sprinting, logic to recharge or cooldown
-        if (p.sprintCooldown > 0) {
+         if (p.sprintCooldown > 0) {
             p.sprintCooldown -= TICK_DELTA;
-        } else if (p.sprintTime < p.maxSprintTime) {
-            // Only recharge if cooldown is done
-             // BUT user asked: Cooldown starts after sprint ends.
-             // If they let go of shift before 0, we should trigger cooldown?
-             // For simplicity: If sprintTime < Max and Not Sprinting -> Cooldown MUST finish before recharge
+         } else if (p.sprintTime < p.maxSprintTime) {
+             // Logic: If you stopped sprinting early, trigger cooldown
              if (p.sprintTime < p.maxSprintTime && p.sprintCooldown <= 0) {
-                 // You stopped sprinting early. Trigger cooldown now.
                  p.sprintCooldown = 20;
              }
              if (p.sprintCooldown <= 0) {
-                 p.sprintTime = p.maxSprintTime; // Instant recharge after 20s or slow? User implies logic: Sprint -> Cooldown -> Full Sprint
+                 p.sprintTime = p.maxSprintTime;
              }
         }
       }
@@ -255,8 +297,8 @@ setInterval(() => {
       io.to(gameId).emit('gameState', game);
     }
   }
-}, 1000 / TICK_RATE); // ~16.6ms
+}, 1000 / TICK_RATE); // approx 4.16ms
 
 server.listen(3030, () => {
-  console.log('Server running on port 3030');
+  console.log('Server running on port 3030 at 240 FPS Tick Rate');
 });
