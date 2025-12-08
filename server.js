@@ -14,7 +14,7 @@ const players = {};
 const GAMES = {};
 const MAP_SIZE = 2000;
 
-// 240 Updates Per Second (High Performance)
+// 240 Updates Per Second
 const TICK_RATE = 240; 
 const TICK_DELTA = 1 / TICK_RATE; 
 
@@ -43,12 +43,13 @@ function createGameState(lobbyId, playerIds) {
       sprintTime: 4,
       sprintCooldown: 0,
       maxSprintTime: 4,
-      attackCooldown: 0, // NEW: Prevents spamming attacks
-      dead: false
+      attackCooldown: 0,
+      dead: false,
+      escaped: false // NEW: Track if they escaped
     };
   });
 
-  // Create Terminals Snapped to Grid
+  // Create Terminals
   for (let i = 0; i < 6; i++) {
     let tx = Math.floor(Math.random() * (MAP_SIZE/100)) * 100 - (MAP_SIZE/2);
     let ty = Math.floor(Math.random() * (MAP_SIZE/100)) * 100 - (MAP_SIZE/2);
@@ -114,7 +115,8 @@ io.on('connection', (socket) => {
     const game = GAMES[p.lobby];
     const playerState = game.players[socket.id];
     
-    if (!playerState || playerState.dead) return;
+    // Ignore input if dead OR escaped
+    if (!playerState || playerState.dead || playerState.escaped) return;
 
     let speed = playerState.speed;
     
@@ -126,24 +128,20 @@ io.on('connection', (socket) => {
       playerState.isSprinting = false;
     }
 
-    // --- NEW MOVEMENT LOGIC (Screen-Relative + Normalized) ---
+    // Movement
     let dx = 0;
     let dy = 0;
+    if (input.up)    { dx -= 1; dy -= 1; } 
+    if (input.down)  { dx += 1; dy += 1; }
+    if (input.left)  { dx -= 1; dy += 1; }
+    if (input.right) { dx += 1; dy -= 1; }
 
-    // Mapping WASD to Isometric Directions so "Up" moves Up on screen
-    if (input.up)    { dx -= 1; dy -= 1; } // North (Top-Left in Grid)
-    if (input.down)  { dx += 1; dy += 1; } // South (Bottom-Right in Grid)
-    if (input.left)  { dx -= 1; dy += 1; } // West  (Bottom-Left in Grid)
-    if (input.right) { dx += 1; dy -= 1; } // East  (Top-Right in Grid)
-
-    // Normalize (Fixes double speed on diagonal)
     if (dx !== 0 || dy !== 0) {
         const length = Math.hypot(dx, dy);
         dx /= length;
         dy /= length;
     }
 
-    // Apply Movement
     playerState.x += dx * speed * TICK_DELTA;
     playerState.y += dy * speed * TICK_DELTA;
 
@@ -154,41 +152,48 @@ io.on('connection', (socket) => {
     if (playerState.y < -limit) playerState.y = -limit;
     if (playerState.y > limit) playerState.y = limit;
 
-    // Interaction (Attack / Repair)
+    // Interaction
     if (input.action) {
       if (playerState.role === 'cat') {
-        // --- NEW ATTACK LOGIC (Cooldowns) ---
         if (playerState.attackCooldown <= 0) {
-            let hitSomething = false;
+            
+            // --- NEW ATTACK LOGIC: Find CLOSEST Target ---
+            let closestTarget = null;
+            let closestDist = 100; // Attack Range
+
             for (const pid in game.players) {
               const target = game.players[pid];
-              if (target.role === 'mouse' && !target.dead) {
+              if (target.role === 'mouse' && !target.dead && !target.escaped) {
                 const dist = Math.hypot(playerState.x - target.x, playerState.y - target.y);
-                if (dist < 100) { 
-                  // HIT!
-                  target.hp -= 40;
-                  hitSomething = true;
-                  
-                  if (target.hp <= 0) {
-                      target.hp = 0;
-                      target.dead = true;
-                      checkGameEnd(game, p.lobby);
-                  } else {
-                      target.speed += 300; 
-                      setTimeout(() => { if(!target.dead) target.speed -= 300; }, 2000);
-                  }
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestTarget = target;
                 }
               }
             }
-            // Trigger Cooldown if we swung (regardless of hit, or only on hit? 
-            // Usually swing has cooldown. Let's set cooldown.)
-            playerState.attackCooldown = 2.0; // 2 Seconds Cooldown
-            
-            // Cat Slowdown on swing
-            if (hitSomething) {
+
+            // If we found a valid target in range, Hit 'em
+            if (closestTarget) {
+                closestTarget.hp -= 40;
+                
+                if (closestTarget.hp <= 0) {
+                    closestTarget.hp = 0;
+                    closestTarget.dead = true;
+                    checkGameEnd(game, p.lobby);
+                } else {
+                    closestTarget.speed += 300; 
+                    setTimeout(() => { 
+                        if(!closestTarget.dead && !closestTarget.escaped) closestTarget.speed -= 300; 
+                    }, 2000);
+                }
+                
+                // Cat slows down on successful hit
                 playerState.speed -= 100;
                 setTimeout(() => { playerState.speed += 100; }, 2000);
             }
+
+            // Cooldown applies whether you hit or missed
+            playerState.attackCooldown = 2.0; 
         }
       } else {
         // Mouse Repair Logic
@@ -214,9 +219,7 @@ io.on('connection', (socket) => {
     
     if (p && p.lobby && lobbies[p.lobby]) {
        lobbies[p.lobby].players = lobbies[p.lobby].players.filter(id => id !== socket.id);
-       if(lobbies[p.lobby].players.length === 0) {
-           delete lobbies[p.lobby];
-       }
+       if(lobbies[p.lobby].players.length === 0) delete lobbies[p.lobby];
     }
 
     if (p && p.lobby && GAMES[p.lobby]) {
@@ -224,7 +227,8 @@ io.on('connection', (socket) => {
         const playerState = game.players[socket.id];
         
         if (playerState) {
-            playerState.dead = true;
+            // Treat disconnect as Death (or you could treat as escape if you want)
+            playerState.dead = true; 
             delete game.players[socket.id]; 
 
             if (playerState.role === 'cat') {
@@ -245,15 +249,23 @@ function checkWinCondition(game) {
 }
 
 function checkGameEnd(game, lobbyId) {
-    const miceLeft = Object.values(game.players).filter(pl => pl.role === 'mouse' && !pl.dead).length;
-    if (miceLeft === 0) {
-        io.to(lobbyId).emit('gameOver', 'cat');
+    const mice = Object.values(game.players).filter(pl => pl.role === 'mouse');
+    const activeMice = mice.filter(m => !m.dead && !m.escaped).length;
+    
+    // If NO mice are left on the map
+    if (activeMice === 0) {
+        const escapedMice = mice.filter(m => m.escaped).length;
+        if (escapedMice > 0) {
+            io.to(lobbyId).emit('gameOver', 'mice'); // Mice Win if at least one escaped
+        } else {
+            io.to(lobbyId).emit('gameOver', 'cat'); // Cat Wins if all died
+        }
         delete GAMES[lobbyId];
         delete lobbies[lobbyId];
     }
 }
 
-// GAME LOOP (240 FPS)
+// GAME LOOP
 setInterval(() => {
   // Lobby Timers
   for (const lobbyId in lobbies) {
@@ -277,13 +289,28 @@ setInterval(() => {
     const game = GAMES[gameId];
     game.timeLeft -= TICK_DELTA;
 
+    // --- EXIT LOGIC ---
+    if (game.exitOpen) {
+        for (const pid in game.players) {
+            const p = game.players[pid];
+            if (p.role === 'mouse' && !p.dead && !p.escaped) {
+                // Check distance to Center (0,0)
+                const dist = Math.hypot(p.x - 0, p.y - 0);
+                if (dist < 100) { // Inside Green Circle
+                    p.escaped = true;
+                    // You could emit a message here like "Player X Escaped!"
+                    checkGameEnd(game, gameId);
+                }
+            }
+        }
+    }
+
     for (const pid in game.players) {
       const p = game.players[pid];
-      
-      // Reduce Attack Cooldown
+      if (p.dead || p.escaped) continue; // Skip updates for gone players
+
       if (p.attackCooldown > 0) p.attackCooldown -= TICK_DELTA;
 
-      // Sprint Logic
       if (p.isSprinting) {
         p.sprintTime -= TICK_DELTA;
         if (p.sprintTime <= 0) {
@@ -306,7 +333,14 @@ setInterval(() => {
     }
 
     if (game.timeLeft <= 0) {
-      io.to(gameId).emit('gameOver', 'cat');
+      // Time over = Cat wins (unless someone escaped? Prompt said Cat wins if none escaped)
+      // We will check escapes:
+      const escapedMice = Object.values(game.players).filter(pl => pl.role === 'mouse' && pl.escaped).length;
+      if (escapedMice > 0) {
+          io.to(gameId).emit('gameOver', 'mice');
+      } else {
+          io.to(gameId).emit('gameOver', 'cat');
+      }
       delete GAMES[gameId];
       delete lobbies[gameId];
     } else {
@@ -316,5 +350,5 @@ setInterval(() => {
 }, 1000 / TICK_RATE);
 
 server.listen(3030, () => {
-  console.log('Server running on port 3030 at 240 FPS');
+  console.log('Server running on port 3030');
 });
