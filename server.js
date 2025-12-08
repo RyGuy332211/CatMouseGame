@@ -14,7 +14,7 @@ const players = {};
 const GAMES = {};
 const MAP_SIZE = 2000;
 
-// CHANGED: 240 Updates Per Second
+// 240 Updates Per Second (High Performance)
 const TICK_RATE = 240; 
 const TICK_DELTA = 1 / TICK_RATE; 
 
@@ -43,6 +43,7 @@ function createGameState(lobbyId, playerIds) {
       sprintTime: 4,
       sprintCooldown: 0,
       maxSprintTime: 4,
+      attackCooldown: 0, // NEW: Prevents spamming attacks
       dead: false
     };
   });
@@ -125,11 +126,26 @@ io.on('connection', (socket) => {
       playerState.isSprinting = false;
     }
 
-    // Movement
-    if (input.up) playerState.y -= speed * TICK_DELTA;
-    if (input.down) playerState.y += speed * TICK_DELTA;
-    if (input.left) playerState.x -= speed * TICK_DELTA;
-    if (input.right) playerState.x += speed * TICK_DELTA;
+    // --- NEW MOVEMENT LOGIC (Screen-Relative + Normalized) ---
+    let dx = 0;
+    let dy = 0;
+
+    // Mapping WASD to Isometric Directions so "Up" moves Up on screen
+    if (input.up)    { dx -= 1; dy -= 1; } // North (Top-Left in Grid)
+    if (input.down)  { dx += 1; dy += 1; } // South (Bottom-Right in Grid)
+    if (input.left)  { dx -= 1; dy += 1; } // West  (Bottom-Left in Grid)
+    if (input.right) { dx += 1; dy -= 1; } // East  (Top-Right in Grid)
+
+    // Normalize (Fixes double speed on diagonal)
+    if (dx !== 0 || dy !== 0) {
+        const length = Math.hypot(dx, dy);
+        dx /= length;
+        dy /= length;
+    }
+
+    // Apply Movement
+    playerState.x += dx * speed * TICK_DELTA;
+    playerState.y += dy * speed * TICK_DELTA;
 
     // Clamp Map
     const limit = MAP_SIZE / 2;
@@ -141,31 +157,38 @@ io.on('connection', (socket) => {
     // Interaction (Attack / Repair)
     if (input.action) {
       if (playerState.role === 'cat') {
-        for (const pid in game.players) {
-          const target = game.players[pid];
-          // Can only hit LIVING mice
-          if (target.role === 'mouse' && !target.dead) {
-            const dist = Math.hypot(playerState.x - target.x, playerState.y - target.y);
-            if (dist < 80) { 
-              // HIT!
-              target.hp -= 40;
-              
-              // FIX: Clamp HP at 0
-              if (target.hp <= 0) {
-                  target.hp = 0;
-                  target.dead = true;
-                  checkGameEnd(game, p.lobby);
-              } else {
-                  // Only apply speed boost if still alive
-                  target.speed += 300; 
-                  setTimeout(() => { if(!target.dead) target.speed -= 300; }, 2000);
+        // --- NEW ATTACK LOGIC (Cooldowns) ---
+        if (playerState.attackCooldown <= 0) {
+            let hitSomething = false;
+            for (const pid in game.players) {
+              const target = game.players[pid];
+              if (target.role === 'mouse' && !target.dead) {
+                const dist = Math.hypot(playerState.x - target.x, playerState.y - target.y);
+                if (dist < 100) { 
+                  // HIT!
+                  target.hp -= 40;
+                  hitSomething = true;
+                  
+                  if (target.hp <= 0) {
+                      target.hp = 0;
+                      target.dead = true;
+                      checkGameEnd(game, p.lobby);
+                  } else {
+                      target.speed += 300; 
+                      setTimeout(() => { if(!target.dead) target.speed -= 300; }, 2000);
+                  }
+                }
               }
-
-              // Cat slows down
-              playerState.speed -= 100;
-              setTimeout(() => { playerState.speed += 100; }, 2000);
             }
-          }
+            // Trigger Cooldown if we swung (regardless of hit, or only on hit? 
+            // Usually swing has cooldown. Let's set cooldown.)
+            playerState.attackCooldown = 2.0; // 2 Seconds Cooldown
+            
+            // Cat Slowdown on swing
+            if (hitSomething) {
+                playerState.speed -= 100;
+                setTimeout(() => { playerState.speed += 100; }, 2000);
+            }
         }
       } else {
         // Mouse Repair Logic
@@ -189,7 +212,6 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const p = players[socket.id];
     
-    // 1. Remove from Lobby List
     if (p && p.lobby && lobbies[p.lobby]) {
        lobbies[p.lobby].players = lobbies[p.lobby].players.filter(id => id !== socket.id);
        if(lobbies[p.lobby].players.length === 0) {
@@ -197,28 +219,22 @@ io.on('connection', (socket) => {
        }
     }
 
-    // 2. Handle ACTIVE GAME Disconnects
     if (p && p.lobby && GAMES[p.lobby]) {
         const game = GAMES[p.lobby];
         const playerState = game.players[socket.id];
         
         if (playerState) {
-            // Mark them as dead/gone
             playerState.dead = true;
-            delete game.players[socket.id]; // Remove from object so they don't count towards logic
+            delete game.players[socket.id]; 
 
-            // Check Win Conditions immediately
             if (playerState.role === 'cat') {
-                // Cat left -> Mice Win
                 io.to(p.lobby).emit('gameOver', 'mice');
                 delete GAMES[p.lobby];
             } else {
-                // Mouse left -> Check if any mice remain
                 checkGameEnd(game, p.lobby);
             }
         }
     }
-
     delete players[socket.id];
   });
 });
@@ -229,9 +245,7 @@ function checkWinCondition(game) {
 }
 
 function checkGameEnd(game, lobbyId) {
-    // Count living mice
     const miceLeft = Object.values(game.players).filter(pl => pl.role === 'mouse' && !pl.dead).length;
-    
     if (miceLeft === 0) {
         io.to(lobbyId).emit('gameOver', 'cat');
         delete GAMES[lobbyId];
@@ -266,7 +280,10 @@ setInterval(() => {
     for (const pid in game.players) {
       const p = game.players[pid];
       
-      // Sprint
+      // Reduce Attack Cooldown
+      if (p.attackCooldown > 0) p.attackCooldown -= TICK_DELTA;
+
+      // Sprint Logic
       if (p.isSprinting) {
         p.sprintTime -= TICK_DELTA;
         if (p.sprintTime <= 0) {
@@ -278,7 +295,6 @@ setInterval(() => {
          if (p.sprintCooldown > 0) {
             p.sprintCooldown -= TICK_DELTA;
          } else if (p.sprintTime < p.maxSprintTime) {
-             // Logic: If you stopped sprinting early, trigger cooldown
              if (p.sprintTime < p.maxSprintTime && p.sprintCooldown <= 0) {
                  p.sprintCooldown = 20;
              }
@@ -297,8 +313,8 @@ setInterval(() => {
       io.to(gameId).emit('gameState', game);
     }
   }
-}, 1000 / TICK_RATE); // approx 4.16ms
+}, 1000 / TICK_RATE);
 
 server.listen(3030, () => {
-  console.log('Server running on port 3030 at 240 FPS Tick Rate');
+  console.log('Server running on port 3030 at 240 FPS');
 });
