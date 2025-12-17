@@ -31,14 +31,6 @@ document.getElementById('btn-settings').addEventListener('click', () => {
     panelLogin.classList.add('hidden-right');
 });
 
-document.getElementById('btn-exit').addEventListener('click', () => {
-    // Try to close, or just reload/redirect
-    if(confirm("Exit Game?")) {
-        window.close(); // Often blocked by browsers
-        location.href = "about:blank"; // Fallback
-    }
-});
-
 document.getElementById('close-settings').addEventListener('click', () => {
     panelSettings.classList.remove('visible-right');
     panelSettings.classList.add('hidden-right');
@@ -128,7 +120,7 @@ socket.on('joinedLobby', (id) => {
 });
 
 socket.on('lobbyUpdate', () => {
-    // Refresh info if needed, mainly handled by waiting for timer/start
+    // Refresh info if needed
 });
 
 socket.on('lobbyTimer', (time) => {
