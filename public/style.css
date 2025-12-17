@@ -1,13 +1,137 @@
-body { margin: 0; padding: 0; background: #222; color: white; font-family: monospace; overflow: hidden; }
-#ui-container { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
-#login-screen, #menu-screen, #lobby-screen, #game-over-screen {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    background: #333; padding: 20px; text-align: center; border: 2px solid #555; pointer-events: auto;
+body { 
+    margin: 0; 
+    padding: 0; 
+    background: #AEEEEE; /* Light Blue Background */
+    color: white; 
+    font-family: 'Arial', sans-serif; 
+    overflow: hidden; 
 }
-.hidden { display: none; }
-input { display: block; margin: 10px auto; padding: 5px; }
-button { padding: 10px 20px; background: #444; color: white; border: 1px solid #777; cursor: pointer; margin: 5px; }
-button:hover { background: #555; }
-#game-ui { pointer-events: none; position: absolute; top: 10px; left: 10px; }
-#stats div { margin-bottom: 5px; font-size: 20px; text-shadow: 1px 1px 0 #000; }
+
+/* --- MAIN MENU --- */
+#main-menu {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+}
+
+.game-title {
+    position: absolute;
+    top: 20px;
+    left: 40px;
+    font-size: 60px;
+    color: #fff;
+    -webkit-text-stroke: 2px black; /* Black outline */
+    margin: 0;
+}
+
+.nav-buttons {
+    position: absolute;
+    top: 200px;
+    left: 40px;
+}
+
+.nav-item {
+    font-size: 35px;
+    color: #AEEEEE; /* Match BG for "transparent" feel or just use outline */
+    color: white;
+    -webkit-text-stroke: 1px black;
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: transform 0.2s;
+}
+
+.nav-item:hover {
+    transform: scale(1.1);
+    color: #FFD700;
+}
+
+/* --- SLIDING PANELS --- */
+.slide-panel {
+    position: absolute;
+    right: 0;
+    top: 30%;
+    width: 400px;
+    background: black;
+    padding: 30px;
+    box-sizing: border-box;
+    transition: transform 0.4s ease-in-out;
+    border-left: 2px solid #555;
+}
+
+.hidden-right {
+    transform: translateX(100%); /* Slide off screen */
+}
+
+.visible-right {
+    transform: translateX(0); /* Slide on screen */
+}
+
+.slide-panel h2 {
+    margin-top: 0;
+    border-bottom: 1px solid white;
+    padding-bottom: 10px;
+    text-align: right;
+}
+
+/* Form Styles */
+.form-group, .setting-row {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+input[type="text"], input[type="password"] {
+    padding: 5px;
+    width: 60%;
+    border: none;
+    border-radius: 3px;
+}
+
+button {
+    padding: 10px 20px;
+    background: #444;
+    color: white;
+    border: 1px solid #777;
+    cursor: pointer;
+    width: 100%;
+    font-size: 16px;
+}
+button:hover { background: #666; }
+
+/* --- GAME UI LAYOUT --- */
+.hidden { display: none !important; }
+
+#lobby-screen {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8);
+    padding: 40px;
+    text-align: center;
+    border-radius: 10px;
+    z-index: 90;
+}
+
+#game-ui { 
+    pointer-events: none; 
+    position: absolute; 
+    width: 100%; height: 100%;
+    z-index: 10;
+}
+
+#stats { position: absolute; top: 20px; left: 20px; text-align: left; }
+#stats div { font-size: 24px; text-shadow: 2px 2px 0 #000; font-weight: bold; }
+
+#top-center-ui {
+    position: absolute; top: 20px; width: 100%; text-align: center;
+}
+#top-center-ui div { font-size: 24px; text-shadow: 2px 2px 0 #000; display: inline-block; margin: 0 20px; }
+
+#game-over-screen {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: #333; padding: 20px; text-align: center; border: 2px solid #555; pointer-events: auto; z-index: 200;
+}
+
 #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
