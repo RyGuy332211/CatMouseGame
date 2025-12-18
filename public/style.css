@@ -1,155 +1,192 @@
-const socket = io();
-let currentUser = null;
-let currentLobby = null;
+@import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Nunito:wght@400;700;900&display=swap');
 
-const mainMenu = document.getElementById('main-menu');
-const lobbyScreen = document.getElementById('lobby-screen');
-const gameUi = document.getElementById('game-ui');
-const gameOverScreen = document.getElementById('game-over-screen');
-
-const panelLogin = document.getElementById('panel-login');
-const panelSettings = document.getElementById('panel-settings');
-
-function closeAllPanels() {
-    panelLogin.classList.remove('visible-right');
-    panelLogin.classList.add('hidden-right');
-    panelSettings.classList.remove('visible-right');
-    panelSettings.classList.add('hidden-right');
+body { 
+    margin: 0; 
+    padding: 0; 
+    background: #AEEEEE; 
+    color: white; 
+    font-family: 'Nunito', sans-serif; 
+    font-weight: 700;
+    overflow: hidden; 
 }
 
-document.getElementById('btn-start').addEventListener('click', () => {
-    const isLoginOpen = panelLogin.classList.contains('visible-right');
-    closeAllPanels();
-    if (!isLoginOpen) {
-        panelLogin.classList.remove('hidden-right');
-        panelLogin.classList.add('visible-right');
-    }
-});
+#main-menu {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+}
 
-document.getElementById('btn-settings').addEventListener('click', () => {
-    const isSettingsOpen = panelSettings.classList.contains('visible-right');
-    closeAllPanels();
-    if (!isSettingsOpen) {
-        panelSettings.classList.remove('hidden-right');
-        panelSettings.classList.add('visible-right');
-    }
-});
+.game-title {
+    position: absolute;
+    top: 30px;
+    left: 50px;
+    font-size: 85px; 
+    color: #fff;
+    font-family: 'Luckiest Guy', cursive;
+    -webkit-text-stroke: 4px black; 
+    letter-spacing: 3px;
+    margin: 0;
+    text-shadow: 5px 5px 0px rgba(0,0,0,0.2);
+}
 
-document.getElementById('close-settings').addEventListener('click', () => {
-    closeAllPanels();
-});
+.nav-buttons {
+    position: absolute;
+    top: 220px;
+    left: 70px;
+}
 
-document.getElementById('login-submit-btn').addEventListener('click', () => {
-    const user = document.getElementById('username').value;
-    const pass = document.getElementById('password').value;
-    if(user && pass) {
-        socket.emit('login', { username: user, password: pass });
-    }
-});
+.nav-item {
+    font-size: 45px;
+    color: white;
+    font-family: 'Luckiest Guy', cursive;
+    -webkit-text-stroke: 2px black;
+    cursor: pointer;
+    margin-bottom: 25px;
+    transition: transform 0.2s, color 0.2s;
+    letter-spacing: 2px;
+}
 
-socket.on('loginResponse', (res) => {
-    if (res.success) {
-        currentUser = res.username;
-        mainMenu.classList.add('hidden');
-        lobbyScreen.classList.remove('hidden');
-    } else {
-        const msg = document.getElementById('login-msg');
-        msg.innerText = res.message;
-        msg.style.color = "#ff5555";
-        msg.style.marginTop = "10px";
-    }
-});
+.nav-item:hover {
+    transform: scale(1.1);
+    color: #FFD700;
+}
 
-document.getElementById('create-lobby-btn').addEventListener('click', () => {
-    socket.emit('createLobby');
-});
+.slide-panel {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: 420px;
+    background: black;
+    padding: 40px;
+    box-sizing: border-box;
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    border-left: 5px solid #fff;
+    border-radius: 20px 0 0 20px;
+    box-shadow: -15px 15px 0px rgba(0,0,0,0.3);
+}
 
-document.getElementById('find-lobby-btn').addEventListener('click', () => {
-    socket.emit('getLobbies');
-});
+.hidden-right {
+    transform: translate(100%, -50%); 
+}
 
-socket.on('lobbyList', (list) => {
-    const existing = document.getElementById('lobby-list-overlay');
-    if (existing) existing.remove();
-    
-    const div = document.createElement('div');
-    div.id = 'lobby-list-overlay';
-    div.style.background = 'rgba(0,0,0,0.95)';
-    div.style.padding = '40px';
-    div.style.position = 'absolute';
-    div.style.top = '50%';
-    div.style.left = '50%';
-    div.style.transform = 'translate(-50%, -50%)';
-    div.style.zIndex = '200';
-    div.style.border = '4px solid white';
-    div.style.borderRadius = '20px';
-    div.style.minWidth = '400px';
-    div.style.textAlign = 'center';
+.visible-right {
+    transform: translate(0, -50%);
+}
 
-    const h3 = document.createElement('h3');
-    h3.innerText = "Available Lobbies";
-    h3.style.fontFamily = "'Luckiest Guy', cursive";
-    h3.style.fontSize = "45px";
-    h3.style.color = "#AEEEEE";
-    h3.style.marginTop = "0";
-    h3.style.letterSpacing = "2px";
-    div.appendChild(h3);
+.slide-panel h2 {
+    margin-top: 0;
+    border-bottom: 3px solid white;
+    padding-bottom: 15px;
+    text-align: right;
+    font-family: 'Luckiest Guy', cursive;
+    font-size: 50px;
+    letter-spacing: 2px;
+}
 
-    if(list.length === 0) {
-        const p = document.createElement('p');
-        p.innerText = "No lobbies found.";
-        p.style.color = "#bbb";
-        p.style.fontFamily = "'Nunito', sans-serif";
-        p.style.fontSize = "20px";
-        div.appendChild(p);
-    }
+.form-group, .setting-row {
+    margin-bottom: 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 22px;
+}
 
-    list.forEach(l => {
-        const btn = document.createElement('button');
-        btn.innerText = `Lobby ${l.id} (${l.players.length}/5)`;
-        btn.style.margin = '10px 0';
-        btn.onclick = () => { socket.emit('joinLobby', l.id); div.remove(); };
-        div.appendChild(btn);
-    });
-    
-    const close = document.createElement('button');
-    close.innerText = "Cancel";
-    close.style.marginTop = "20px";
-    close.style.background = "#555";
-    close.onclick = () => div.remove();
-    div.appendChild(close);
+input[type="text"], input[type="password"] {
+    padding: 12px;
+    width: 60%;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    outline: none;
+}
 
-    document.body.appendChild(div);
-});
+button {
+    padding: 15px 20px;
+    background: #ff5e5e; 
+    color: white;
+    border: 3px solid #fff;
+    border-radius: 12px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 24px;
+    font-family: 'Luckiest Guy', cursive;
+    letter-spacing: 1px;
+    transition: background 0.2s, transform 0.1s;
+}
 
-socket.on('joinedLobby', (id) => {
-    currentLobby = id;
-    const lobbyDisplay = document.getElementById('active-lobby-display');
-    lobbyDisplay.innerHTML = `<h2>Lobby: ${id}</h2><h3 id="lobby-timer">Waiting for players...</h3><ul id="player-list"></ul>`;
-    const h2 = lobbyDisplay.querySelector('h2');
-    h2.style.fontFamily = "'Luckiest Guy', cursive";
-    h2.style.fontSize = "40px";
-    h2.style.letterSpacing = "2px";
-    
-    const h3 = lobbyDisplay.querySelector('h3');
-    h3.style.fontFamily = "'Nunito', sans-serif";
-});
+button:hover { 
+    background: #ff3333; 
+}
 
-socket.on('lobbyUpdate', () => {});
+button:active {
+    transform: scale(0.98);
+}
 
-socket.on('lobbyTimer', (time) => {
-    const timerEl = document.getElementById('lobby-timer');
-    if(timerEl) timerEl.innerText = `Starting in: ${time}`;
-});
+.hidden { display: none !important; }
 
-socket.on('gameStart', (initialState) => {
-    lobbyScreen.classList.add('hidden');
-    gameUi.classList.remove('hidden');
-    startGame(initialState);
-});
+#lobby-screen {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.95);
+    padding: 50px;
+    text-align: center;
+    border-radius: 25px;
+    border: 5px solid white;
+    z-index: 90;
+    min-width: 500px;
+}
 
-socket.on('gameOver', (winner) => {
-    gameUi.classList.add('hidden');
-    gameOverScreen.classList.remove('hidden');
-    document.getElementById('winner-text').innerText = winner === 'cat' ? "CAT WINS" : "MICE WIN";
-});
+#lobby-screen h1 {
+    font-family: 'Luckiest Guy', cursive;
+    font-size: 60px;
+    color: #AEEEEE;
+    margin-top: 0;
+    letter-spacing: 2px;
+}
+
+#game-ui { 
+    pointer-events: none; 
+    position: absolute; 
+    width: 100%; height: 100%;
+    z-index: 10;
+}
+
+#stats { position: absolute; top: 20px; left: 20px; text-align: left; }
+#stats div { 
+    font-family: 'Luckiest Guy', cursive;
+    font-size: 30px; 
+    text-shadow: 3px 3px 0 #000; 
+    -webkit-text-stroke: 1px black; 
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+}
+
+#top-center-ui {
+    position: absolute; top: 20px; width: 100%; text-align: center;
+}
+#top-center-ui div { 
+    font-family: 'Luckiest Guy', cursive;
+    font-size: 35px; 
+    text-shadow: 3px 3px 0 #000; 
+    display: inline-block; 
+    margin: 0 30px; 
+    -webkit-text-stroke: 1px black;
+    letter-spacing: 1px;
+}
+
+#game-over-screen {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: #333; padding: 50px; text-align: center; border: 5px solid #fff; pointer-events: auto; z-index: 200; border-radius: 25px;
+}
+#game-over-screen h1 { 
+    font-family: 'Luckiest Guy', cursive; 
+    font-size: 70px; 
+    margin: 0 0 30px 0; 
+    letter-spacing: 2px;
+}
+
+#game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
