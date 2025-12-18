@@ -27,7 +27,7 @@ body {
     -webkit-text-stroke: 4px black; 
     letter-spacing: 3px;
     margin: 0;
-    text-shadow: 5px 5px 0px rgba(0,0,0,0.2);
+    /* text-shadow removed */
 }
 
 .nav-buttons {
@@ -60,11 +60,10 @@ body {
     background: black;
     padding: 40px;
     box-sizing: border-box;
-    /* Changed to Sine Ease-In-Out for smooth non-bouncy movement */
     transition: transform 0.4s cubic-bezier(0.445, 0.05, 0.55, 0.95);
-    border: none; /* Removed white outline */
+    border: none; 
     border-radius: 20px 0 0 20px;
-    box-shadow: none; /* Removed shadow */
+    box-shadow: none;
 }
 
 .hidden-right {
